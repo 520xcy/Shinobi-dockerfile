@@ -1,0 +1,181 @@
+FROM node:16-bullseye-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /home/Shinobi
+
+ENV DB_USER=majesticflame \
+    DB_PASSWORD='' \
+    DB_HOST='localhost' \
+    DB_DATABASE=ccio \
+    DB_PORT=3306 \
+    SUBSCRIPTION_ID=sub_XXXXXXXXXXXX \
+    PLUGIN_KEYS='{}' \
+    SSL_ENABLED='false' \
+    SSL_COUNTRY='CA' \
+    SSL_STATE='BC' \
+    SSL_LOCATION='Vancouver' \
+    SSL_ORGANIZATION='Shinobi Systems' \
+    SSL_ORGANIZATION_UNIT='IT Department' \
+    SSL_COMMON_NAME='nvr.ninja' \
+    DB_DISABLE_INCLUDED=false
+
+RUN mkdir -p /home/Shinobi /config /var/lib/mysql && \
+    echo 'deb http://mirrors.cloud.tencent.com/debian/ bullseye main contrib non-free\n\
+        deb http://mirrors.cloud.tencent.com/debian/ bullseye-updates main contrib non-free\n\
+        deb http://mirrors.cloud.tencent.com/debian/ bullseye-backports main contrib non-free\n\
+        deb http://mirrors.cloud.tencent.com/debian-security bullseye-security main contrib non-free\n\
+        deb-src http://mirrors.cloud.tencent.com/debian/ bullseye main contrib non-free\n\
+        deb-src http://mirrors.cloud.tencent.com/debian/ bullseye-updates main contrib non-free\n\
+        deb-src http://mirrors.cloud.tencent.com/debian/ bullseye-backports main contrib non-free\n\
+        deb-src http://mirrors.cloud.tencent.com/debian-security bullseye-security main contrib non-free\n\
+        deb http://deb.debian.org/debian bullseye-backports main\n\
+        deb-src http://deb.debian.org/debian bullseye-backports main'\
+    > /etc/apt/sources.list && \
+    apt update -y && \
+    apt install -y wget curl net-tools sudo
+
+# Install FFmpeg
+RUN apt install -y intel-media-va-driver-non-free ocl-icd-opencl-dev libmfx-dev \ 
+    build-essential yasm libtool libc6 libc6-dev \
+    libnuma-dev \
+    libssl-dev \ 
+    libass-dev \
+    libfdk-aac-dev \
+    libmp3lame-dev \
+    libopencore-amrnb-dev \
+    libopencore-amrwb-dev \
+    libopus-dev \
+    libopenal-dev \
+    libspeex-dev \
+    libtheora-dev \
+    libtwolame-dev \
+    libvpx-dev \
+    libwebp-dev \
+    libx264-dev \
+    libx265-dev \
+    libxvidcore-dev \
+    libvorbis-dev \
+    libvdpau-dev \
+    libva-dev \
+    git-core && \
+    git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg && \
+    cd ffmpeg && \
+    ./configure \
+    --pkg-config-flags="--static" \
+    --enable-gpl \
+    --enable-version3 \
+    --enable-libspeex \
+    --enable-libmp3lame \
+    --enable-libvorbis \
+    --enable-shared \
+    --enable-libfdk-aac \
+    --enable-libwebp \
+    --enable-libass \
+    --enable-libfontconfig \
+    --enable-libfreetype \
+    --enable-libopencore_amrnb \
+    --enable-libopencore_amrwb \
+    --enable-libopus \
+    --enable-opencl \
+    --enable-libxcb \
+    --enable-opengl \
+    --enable-libtheora \
+    --enable-libtwolame \
+    --enable-libvpx \
+    --enable-libx264 \
+    --enable-libx265 \
+    --enable-libxvid \
+    --enable-libmfx \
+    --enable-nonfree \
+    --enable-openal \
+    --enable-openssl \
+    --enable-vaapi \
+    --enable-vdpau \
+    --enable-ffplay \
+    --enable-ffprobe && \
+    make -j && \
+    make install && \
+    cd .. && \
+    rm -rf ffmpeg
+
+# # Install MariaDB server... the debian way
+RUN if [ "$DB_DISABLE_INCLUDED" = "false" ] ; then set -ex; \
+    { \
+        echo "mariadb-server" mysql-server/root_password password '${DB_ROOT_PASSWORD}'; \
+        echo "mariadb-server" mysql-server/root_password_again password '${DB_ROOT_PASSWORD}'; \
+    } | debconf-set-selections; \
+    apt-get install -y \
+        "mariadb-server" \
+        socat \
+    ; \
+    find /etc/mysql/ -name '*.cnf' -print0 \
+        | xargs -0 grep -lZE '^(bind-address|log)' \
+        | xargs -rt -0 sed -Ei 's/^(bind-address|log)/#&/'; fi
+
+RUN if [ "$DB_DISABLE_INCLUDED" = "false" ] ; then sed -ie "s/^bind-address\s*=\s*127\.0\.0\.1$/#bind-address = 0.0.0.0/" /etc/mysql/my.cnf; fi
+
+# RUN apt install -y software-properties-common \
+#         libfreetype6-dev \
+#         libgnutls28-dev \
+#         libmp3lame-dev \
+#         libass-dev \
+#         libogg-dev \
+#         libtheora-dev \
+#         libvorbis-dev \
+#         libvpx-dev \
+#         libwebp-dev \
+#         libssh2-1-dev \
+#         libopus-dev \
+#         librtmp-dev \
+#         libx264-dev \
+#         libx265-dev \
+#         yasm
+# RUN apt install -y \
+#         build-essential \
+#         bzip2 \
+#         coreutils \
+#         procps \
+#         gnutls-bin \
+#         nasm \
+#         tar \
+#         x264
+
+# RUN apt install -y \
+#                 git \
+#                 make \
+#                 g++ \
+#                 gcc \
+#                 pkg-config \
+#                 python3 \
+#                 wget \
+#                 tar \
+#                 sudo \
+#                 xz-utils
+    
+COPY . .
+#RUN rm -rf /home/Shinobi/plugins
+COPY ./plugins  /home/Shinobi/plugins
+RUN chmod -R 777 /home/Shinobi/plugins && \
+    npm i npm@latest -g && \
+    npm install --unsafe-perm && \
+    npm install pm2 -g
+COPY ./Docker/pm2.yml ./
+
+# Copy default configuration files
+# COPY ./config/conf.json ./config/super.json /home/Shinobi/
+RUN chmod -f +x /home/Shinobi/Docker/init.sh
+RUN sed -i -e 's/\r//g' /home/Shinobi/Docker/init.sh
+# RUN chmod -f +x /home/Shinobi/shinobi
+
+VOLUME ["/home/Shinobi/videos"]
+VOLUME ["/home/Shinobi/plugins"]
+VOLUME ["/home/Shinobi/libs/customAutoLoad"]
+VOLUME ["/config"]
+VOLUME ["/var/lib/mysql"]
+
+EXPOSE 8080 443 21 25
+
+ENTRYPOINT ["sh","/home/Shinobi/Docker/init.sh"]
+
+CMD [ "pm2-docker", "/home/Shinobi/Docker/pm2.yml" ]
