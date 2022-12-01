@@ -1,4 +1,4 @@
-FROM node:16-bullseye-slim
+FROM node:19-bullseye-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -18,7 +18,7 @@ ENV DB_USER=majesticflame \
     SSL_ORGANIZATION='Shinobi Systems' \
     SSL_ORGANIZATION_UNIT='IT Department' \
     SSL_COMMON_NAME='nvr.ninja' \
-    DB_DISABLE_INCLUDED=false
+    DB_DISABLE_INCLUDED=true
 
 RUN mkdir -p /home/Shinobi /config /var/lib/mysql && \
     echo 'deb http://mirrors.cloud.tencent.com/debian/ bullseye main contrib non-free\n\
@@ -36,7 +36,29 @@ RUN mkdir -p /home/Shinobi /config /var/lib/mysql && \
     apt install -y wget curl net-tools sudo
 
 # Install FFmpeg
-RUN apt install -y intel-media-va-driver-non-free ocl-icd-opencl-dev libmfx-dev \ 
+RUN apt install -y \
+    intel-media-va-driver-non-free \
+    libass9 \
+    libfdk-aac2 \
+    libopencore-amrnb0 \
+    libopencore-amrwb0 \
+    libmp3lame0 \ 
+    libmfx1 \
+    ocl-icd-libopencl1 \
+    libopenal1 \
+    libspeex1 \
+    libtheora0 \
+    libtwolame0 \
+    libvpx6 \
+    libwebp6 \
+    libwebpmux3 \ 
+    libx264-160 \
+    libx265-192 \
+    libxvidcore4 \
+    libvdpau1 \
+    libva-drm2 \
+    libva-x11-2 \
+    ocl-icd-opencl-dev libmfx-dev \ 
     build-essential yasm libtool libc6 libc6-dev \
     libnuma-dev \
     libssl-dev \ 
@@ -97,9 +119,39 @@ RUN apt install -y intel-media-va-driver-non-free ocl-icd-opencl-dev libmfx-dev 
     make -j && \
     make install && \
     cd .. && \
-    rm -rf ffmpeg
+    rm -rf ffmpeg && \
+    apt remove -y --purge ocl-icd-opencl-dev \
+    libmfx-dev \
+    build-essential \
+    yasm \
+    libtool \
+    libc6-dev \
+    libnuma-dev \
+    libssl-dev \
+    libass-dev \
+    libfdk-aac-dev \
+    libmp3lame-dev \
+    libopencore-amrnb-dev \
+    libopencore-amrwb-dev \
+    libopus-dev \
+    libopenal-dev \
+    libspeex-dev \
+    libtheora-dev \
+    libtwolame-dev \
+    libvpx-dev \
+    libwebp-dev \
+    libx264-dev \
+    libx265-dev \
+    libxvidcore-dev \
+    libvorbis-dev \
+    libvdpau-dev \
+    libva-dev \
+    git-core && \
+    apt autoremove -y --purge && \
+    apt clean
 
-# # Install MariaDB server... the debian way
+
+# Install MariaDB server... the debian way
 RUN if [ "$DB_DISABLE_INCLUDED" = "false" ] ; then set -ex; \
     { \
         echo "mariadb-server" mysql-server/root_password password '${DB_ROOT_PASSWORD}'; \
